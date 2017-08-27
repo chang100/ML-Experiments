@@ -27,3 +27,6 @@ Network in Network model based on https://arxiv.org/pdf/1312.4400.pdf
 | Conv       |  Kernel: 1x1, Channel: 10  |
 | ReLU       |                            |
 | AvgPool    |  Kernel: 7x7, Stride: 1    |
+
+# Results
+85.2% validation accuracy on Cifar-10
