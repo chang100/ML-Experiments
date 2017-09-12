@@ -8,7 +8,6 @@ class LoadFromFile (argparse.Action):
 
 def parse():
     parser = argparse.ArgumentParser()
-    #parser.add_argument("-c", "--c", type=str, help="configuration file")
     parser.add_argument("-c", "--c", type=open, action=LoadFromFile)
     parser.add_argument("-lr", "--lr", type=float, help="learning rate")
     parser.add_argument("-bsz", "--bsz", type=int, help="batch size")
