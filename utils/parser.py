@@ -15,6 +15,21 @@ def parse():
     parser.add_argument("-lr_decay", "--lr_decay", type=float, help="learning rate decay rate")
     parser.add_argument("-lr_decay_epochs", "--lr_decay_epochs", type=int, help="learning rate decay epochs")
     parser.add_argument("-optimizer", "--optimizer", type=str, help="optimizer type")
+    parser.add_argument("-momentum", "--momentum", type=float, help="momentum term")
 
     args = parser.parse_args()
+
+    default_args = {'lr': 0.01,
+                    'bsz': 32,
+                    'epochs': 10,
+                    'lr_decay': None,
+                    'lr_decay_epochs': 10,
+                    'optimizer': 'Momentum',
+                    'momentum': 0.9
+                    } 
+
+    for field, value in default_args.items():
+        if getattr(args, field) is None:
+            setattr(args, field, value)
+
     return args

@@ -5,19 +5,23 @@ import random
 import sys
 import os
 import logging
+import pdb
 
 from gen_utils import *
 
 layers = tf.contrib.layers
 
 class NiNModel():
-    def __init__(self, config):
+    def __init__(self, FLAGS):
         # Collect Hyperparameters in config object
-        self.config = config
+        self.config = FLAGS
 
         # Get global step for training
         self.global_step = tf.contrib.framework.get_or_create_global_step()
-        self.lr = tf.train.exponential_decay(self.config.INIT_LR, self.global_step, int(self.config.DECAY_EPOCHS * 50000 / self.config.BATCH_SIZE), self.config.DECAY_RATE, staircase=True) 
+        if FLAGS.lr_decay is None:
+            self.lr = FLAGS.lr
+        else:
+            self.lr = tf.train.exponential_decay(self.config.lr, self.global_step, int(self.config.lr_decay_epochs* 50000 / self.config.bsz), self.config.lr_decay, staircase=True) 
 
         # Initialize model
         self.setup_model()
@@ -61,8 +65,11 @@ class NiNModel():
             print(activation.name, ':', activation.get_shape())
         
         self.CE = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y, logits=h_pool8))
+        '''
         opt = tf.train.MomentumOptimizer(self.lr, momentum=0.9)
         self.train_step = opt.minimize(self.CE, self.global_step)
+        '''
+        self.train_step = layers.optimize_loss(loss=self.CE, global_step=self.global_step, learning_rate=self.lr, optimizer=get_optimizer(self.config))
     
     def train(self, sess):
         self.best_acc = 0
@@ -100,17 +107,17 @@ class NiNModel():
         order = list(range(num_train))
 
         # Begin training
-        for ep in range(self.config.NUM_EPOCHS):
+        for ep in range(self.config.epochs):
             logging.info('\n *** Epoch {} ***'.format(ep))
             
             losses = []
             accuracies = []
 
-            num_batches = 1 + int(num_train / self.config.BATCH_SIZE)
+            num_batches = 1 + int(num_train / self.config.bsz)
             prog = Progbar(target=num_batches)
             random.shuffle(order)
             for i in range(num_batches):
-                indices = order[i * self.config.BATCH_SIZE: (i+1) * self.config.BATCH_SIZE]
+                indices = order[i * self.config.bsz: (i+1) * self.config.bsz]
 
                 train_x = self.train_x[indices]
                 train_y = self.train_y[indices]
@@ -123,12 +130,10 @@ class NiNModel():
             avg_loss = float(sum(losses)) / len(losses)
             avg_acc  = float(sum(accuracies)) / len(accuracies)
 
-            print('')
             logging.info('Train Loss: {}'.format(avg_loss))
             logging.info('Train Acc:  {}'.format(avg_acc))
 
             val_loss, val_acc = self.evaluate(sess)
-            print('')
             logging.info('Valid Loss: {}'.format(val_loss))
             logging.info('Valid Acc:  {}'.format(val_acc))
 
@@ -153,7 +158,7 @@ class NiNModel():
         num_test = self.test_y.size
         order = range(num_test)
 
-        valid_bsz = self.config.BATCH_SIZE * 5
+        valid_bsz = self.config.bsz * 5
         num_batches = int(num_test / valid_bsz) + 1
         val_prog = Progbar(target=num_batches)
 
