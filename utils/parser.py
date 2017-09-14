@@ -20,10 +20,10 @@ def parse():
     args = parser.parse_args()
 
     default_args = {'lr': 0.01,
-                    'bsz': 32,
-                    'epochs': 10,
+                    'bsz': 64,
+                    'epochs': 60,
                     'lr_decay': None,
-                    'lr_decay_epochs': 10,
+                    'lr_decay_epochs': 15,
                     'optimizer': 'Momentum',
                     'momentum': 0.9
                     } 

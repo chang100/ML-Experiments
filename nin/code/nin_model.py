@@ -16,6 +16,9 @@ class NiNModel():
         # Collect Hyperparameters in config object
         self.config = FLAGS
 
+        self.train_step_count = 0
+        self.test_step_count = 0
+
         # Get global step for training
         self.global_step = tf.contrib.framework.get_or_create_global_step()
         if FLAGS.lr_decay is None:
@@ -65,10 +68,7 @@ class NiNModel():
             print(activation.name, ':', activation.get_shape())
         
         self.CE = tf.reduce_mean(tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.y, logits=h_pool8))
-        '''
-        opt = tf.train.MomentumOptimizer(self.lr, momentum=0.9)
-        self.train_step = opt.minimize(self.CE, self.global_step)
-        '''
+        tf.summary.scalar('ce_loss', self.CE)
         self.train_step = layers.optimize_loss(loss=self.CE, global_step=self.global_step, learning_rate=self.lr, optimizer=get_optimizer(self.config))
     
     def train(self, sess):
@@ -80,6 +80,11 @@ class NiNModel():
             os.mkdir('model_output')
         file_handler = logging.FileHandler(os.path.join('./model_output', 'log.txt'))
         logging.getLogger().addHandler(file_handler)
+
+        self.merged = tf.summary.merge_all()
+        self.train_writer = tf.summary.FileWriter('train',
+                                                      sess.graph)
+        self.test_writer = tf.summary.FileWriter('test')
 
         # initialize all variables
         sess.run(tf.global_variables_initializer())
@@ -117,12 +122,13 @@ class NiNModel():
             prog = Progbar(target=num_batches)
             random.shuffle(order)
             for i in range(num_batches):
+                self.train_step_count += 1
                 indices = order[i * self.config.bsz: (i+1) * self.config.bsz]
 
                 train_x = self.train_x[indices]
                 train_y = self.train_y[indices]
 
-                loss, accuracy = self.optimize(sess, train_x, train_y)
+                loss, accuracy = self.optimize(sess, train_x, train_y, i)
                 prog.update(i, [('train loss', loss), ('train acc', accuracy)])
                 losses.append(loss)
                 accuracies.append(accuracy)
@@ -130,10 +136,12 @@ class NiNModel():
             avg_loss = float(sum(losses)) / len(losses)
             avg_acc  = float(sum(accuracies)) / len(accuracies)
 
+            print('')
             logging.info('Train Loss: {}'.format(avg_loss))
             logging.info('Train Acc:  {}'.format(avg_acc))
 
             val_loss, val_acc = self.evaluate(sess)
+            print('')
             logging.info('Valid Loss: {}'.format(val_loss))
             logging.info('Valid Acc:  {}'.format(val_acc))
 
@@ -142,14 +150,19 @@ class NiNModel():
                 logging.info('Best accuracy so far!')
                 self.saver.save(sess, 'train/model_output', ep)
 
-    def optimize(self, sess, train_x, train_y):
+    def optimize(self, sess, train_x, train_y, i):
 
         input_feed = {}
 
         input_feed[self.x] = train_x
         input_feed[self.y] = train_y
+        
+        if i % 10 == 0:
+            summary, _, accuracy, loss = sess.run([self.merged, self.train_step, self.accuracy, self.CE], input_feed)
+            self.train_writer.add_summary(summary, self.train_step_count)
+        else:
+            _, accuracy, loss = sess.run([self.train_step, self.accuracy, self.CE], input_feed)
 
-        _, accuracy, loss = sess.run([self.train_step, self.accuracy, self.CE], input_feed)
         #accuracy, loss = sess.run([self.accuracy, self.CE], input_feed)
         
         return loss, accuracy
@@ -166,6 +179,7 @@ class NiNModel():
         accuracies = []
         
         for i in range(num_batches):
+            self.test_step_count += 1
             indices = order[i * valid_bsz: (i+1) * valid_bsz]
 
             test_x = self.test_x[indices]
@@ -187,8 +201,9 @@ class NiNModel():
         input_feed[self.x] = valid_x
         input_feed[self.y] = valid_y
 
-        accuracy, loss = sess.run([self.accuracy, self.CE], input_feed)
+        summary, accuracy, loss = sess.run([self.merged, self.accuracy, self.CE], input_feed)
 
+        self.test_writer.add_summary(summary, self.test_step_count)
         return loss, accuracy
 
     def preprocess_data(self):
